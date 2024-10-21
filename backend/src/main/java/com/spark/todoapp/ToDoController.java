@@ -2,6 +2,7 @@ package com.spark.todoapp;
 
 import com.spark.todoapp.model.ToDo;
 import com.spark.todoapp.model.Priority;
+import com.spark.todoapp.model.ToDoPaginationResponse;
 import com.spark.todoapp.service.ToDoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -24,7 +25,7 @@ public class ToDoController {
     }
 
     @GetMapping
-    public List<ToDo> getAllToDos(@RequestParam(defaultValue = "0") int page){
+    public ToDoPaginationResponse getAllToDos(@RequestParam(defaultValue = "0") int page){
         return toDoService.getAllToDosWithPagination(page);
     }
 
@@ -39,8 +40,9 @@ public class ToDoController {
     }
 
     @PutMapping("/{id}")
-    public ToDo updateToDo(@PathVariable UUID id, @RequestBody ToDo updatedToDo){
-    return toDoService.updateToDo(id, updatedToDo.getText(), updatedToDo.getPriority(), updatedToDo.getDueDate().toString());//aqui podria cambiar que no reciba una cadena tal vez
+    public ToDo updateToDo(@PathVariable UUID id, @RequestBody ToDo updatedToDo) {
+        String dueDateString = (updatedToDo.getDueDate() != null) ? updatedToDo.getDueDate().toString() : null;
+        return toDoService.updateToDo(id, updatedToDo.getText(), updatedToDo.getPriority(), dueDateString);
     }
 
     @DeleteMapping("/{id}")
@@ -49,11 +51,15 @@ public class ToDoController {
     }
 
     @GetMapping("/filter")
-    public List<ToDo> findToDos(@RequestParam(required = false) Boolean done,
-                                @RequestParam(required = false) String name,
-                                @RequestParam(required = false) Priority priority,
-                                @RequestParam(defaultValue = "0") int page){
-        return toDoService.findToDos(name, done, priority, page);
+    public ToDoPaginationResponse findToDos(
+            @RequestParam(required = false) Boolean done,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) Priority priority,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) String sortByPriority,
+            @RequestParam(required = false) String sortByDueDate
+    ) {
+        return toDoService.findToDos(name, done, priority, page, sortByPriority, sortByDueDate);
     }
 
     @PostMapping("/{id}/done")

@@ -2,6 +2,7 @@ package com.spark.todoapp.service;
 
 import com.spark.todoapp.model.Priority;
 import com.spark.todoapp.model.ToDo;
+import com.spark.todoapp.model.ToDoPaginationResponse;
 import com.spark.todoapp.repository.ToDoRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +16,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Comparator;
 
 import java.time.Duration;
 
@@ -28,7 +30,7 @@ public class ToDoService {
         this.toDoRepository = toDoRepository;
     }
 
-    public List<ToDo> getAllToDosWithPagination(int page){
+    public ToDoPaginationResponse getAllToDosWithPagination(int page){
         int pageSize = 10;
 
         List<ToDo> allTodos = toDoRepository.getAllToDos();
@@ -36,11 +38,9 @@ public class ToDoService {
         int start = page * pageSize;
         int end = Math.min(start + pageSize, allTodos.size());
 
-        if (start > allTodos.size()){
-            return new ArrayList<>();
-        }
+        List<ToDo> paginatedTodos = (start > allTodos.size()) ? new ArrayList<>() : allTodos.subList(start, end);
 
-        return allTodos.subList(start, end);
+        return new ToDoPaginationResponse(paginatedTodos, allTodos.size());
     }
 
     public Optional<ToDo> getToDoById(UUID id){
@@ -70,10 +70,12 @@ public class ToDoService {
         return null;
     }
 
-    public List<ToDo> findToDos(String name, Boolean done, Priority priority, int page){
+    public ToDoPaginationResponse findToDos(String name, Boolean done, Priority priority, int page, String sortByPriority, String sortByDueDate) {
         int pageSize = 10;
-        List<ToDo> filteredTodos = toDoRepository.getAllToDos();
 
+        List<ToDo> filteredTodos = new ArrayList<>(toDoRepository.getAllToDos());
+
+        // Filtros
         if (done != null) {
             filteredTodos = filteredTodos.stream()
                     .filter(todo -> todo.isDone() == done)
@@ -92,15 +94,39 @@ public class ToDoService {
                     .collect(Collectors.toList());
         }
 
+        // Ordenamiento
+        Comparator<ToDo> comparator = Comparator.comparing(ToDo::getId);  // Comparador inicial sin efecto
+
+        // Si se envía un ordenamiento por prioridad
+        if (sortByPriority != null) {
+            Comparator<ToDo> priorityComparator = Comparator.comparing(ToDo::getPriority);
+            if ("desc".equalsIgnoreCase(sortByPriority)) {
+                priorityComparator = priorityComparator.reversed();
+            }
+            comparator = priorityComparator;  // Se establece el comparador de prioridad como principal
+        }
+
+        // Ordenamiento por fecha de vencimiento
+        if (sortByDueDate != null) {
+            Comparator<ToDo> dueDateComparator = Comparator.comparing(ToDo::getDueDate, Comparator.nullsLast(Comparator.naturalOrder()));
+            if ("desc".equalsIgnoreCase(sortByDueDate)) {
+                dueDateComparator = dueDateComparator.reversed();
+            }
+            // Si ya hay un comparador de prioridad, aplicamos el subordenamiento por fecha
+            // Si no hay comparador de prioridad, el orden por fecha será el criterio principal
+            comparator = (sortByPriority != null) ? comparator.thenComparing(dueDateComparator) : dueDateComparator;
+        }
+
+        // Aplicar el comparador final para ordenar los todos
+        filteredTodos.sort(comparator);
+
+        // Paginación
         int start = page * pageSize;
         int end = Math.min(start + pageSize, filteredTodos.size());
 
-        if (start > filteredTodos.size()){
-            return new ArrayList<>();
-        }
+        List<ToDo> paginatedTodos = (start > filteredTodos.size()) ? new ArrayList<>() : filteredTodos.subList(start, end);
 
-        return filteredTodos.subList(start, end);
-
+        return new ToDoPaginationResponse(paginatedTodos, filteredTodos.size());
     }
 
     public ToDo markAsDone(UUID id){//quiza juntar esto con lo de abajo
@@ -123,7 +149,7 @@ public class ToDoService {
             ToDo existingToDo = existingToDoOpt.get();
             if (existingToDo.isDone()){
                 existingToDo.setDone(false);
-                existingToDo.setDueDate(null);
+                //existingToDo.setDueDate(null);
                 return toDoRepository.updateToDo(existingToDo);
             }
             return existingToDo;
